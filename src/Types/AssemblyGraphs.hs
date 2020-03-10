@@ -1,24 +1,36 @@
+-- |
+-- For asymptotic analysis below we use the following variables:
+--
+-- * p - base of the graph
+-- * n - sdf
+-- * m - asdf
 module Types.AssemblyGraphs where
 
+import           Control.Arrow ((&&&))
 import           Data.Array
 import           Data.BitArray
+import           Data.Function (on)
 import qualified Data.Set      as Set
 import           Prelude       hiding (seq)
 import           Types.DNA
+
+-- $setup
+-- >>> :set -XOverloadedStrings
 
 type Edge = Int
 
 type Node = Int
 
+-- | Please write full sentences.
 type Base = Int
 
-data DeBruijnGraph =
-  DeBruijnGraph
-    { p           :: Base
-    , bitArr      :: BitArray
-    , includes    :: [(Int, Bool)]
-    , occurrences :: Array Edge Int
-    }
+-- | Please write full sentences.
+data DeBruijnGraph = DeBruijnGraph
+  { p           :: Base             -- ^ Please write full sentences.
+  , bitArr      :: BitArray         -- ^ Please write full sentences.
+  , includes    :: [(Int, Bool)]
+  , occurrences :: Array Edge Int
+  }
 
 instance Show DeBruijnGraph where
   show deBruijnGraph = show multiplicityList
@@ -28,10 +40,25 @@ instance Show DeBruijnGraph where
           (\(ind, value) -> (numberToSequence (p deBruijnGraph) ind, value))
           ((assocs . occurrences) deBruijnGraph)
 
+-- | Graphs are equal when
+--
+-- * base ...
+-- * bitarray ...
+-- * occurrences ...
 instance Eq DeBruijnGraph where
-  (==) (DeBruijnGraph p1 bitArr1 _ arr1) (DeBruijnGraph p2 bitArr2 _ arr2) =
-    p1 == p2 && arr1 == arr2 && bitArr1 == bitArr2
+--  g1 == g2 = and
+--    [ p g1           == p g2
+--    , bitArr g1      == bitArr g2
+--    , occurrences g1 == occurrences g2
+--    ]
+  (==) = (==) `on` (p &&& bitArr &&& occurrences)
 
+-- * Construction
+
+-- | Empty de Bruijn graph.
+--
+-- >>> emptyDeBruijn 1
+-- [(A,0),(C,0),(G,0),(T,0)]
 emptyDeBruijn :: Base -> DeBruijnGraph
 emptyDeBruijn base =
   DeBruijnGraph
@@ -41,6 +68,8 @@ emptyDeBruijn base =
     , occurrences = array (0, 4 ^ base - 1) [(i, 0) | i <- [0 .. 4 ^ base - 1]]
     }
 
+-- | /O(n)/.
+-- Add DNA sequence to a de Bruijn graph.
 insertSequence :: DNASequence -> DeBruijnGraph -> DeBruijnGraph
 insertSequence seq deBruijnGraph
   | length (show seq) > p deBruijnGraph =
@@ -64,8 +93,8 @@ insertSequences (seq:seqs) deBruijnGraph = insertSequences seqs newDeBruijnGraph
 fromDNASequences :: Base -> [DNASequence] -> DeBruijnGraph
 fromDNASequences base seqs = insertSequences seqs (emptyDeBruijn base)
 
-(///) :: DeBruijnGraph -> DNASequence -> DeBruijnGraph
-(///) deBruijnGraph seq' =
+diffSequence :: DeBruijnGraph -> DNASequence -> DeBruijnGraph
+diffSequence deBruijnGraph seq' =
   deBruijnGraph
     {bitArr = newBitArr, includes = newIncludes, occurrences = newOccurrences}
   where
@@ -77,6 +106,9 @@ fromDNASequences base seqs = insertSequences seqs (emptyDeBruijn base)
       if newOccurrences ! edge == 0
         then filter (\(ind, _) -> ind /= edge) (includes deBruijnGraph)
         else includes deBruijnGraph
+
+(///) :: DeBruijnGraph -> DNASequence -> DeBruijnGraph
+(///) = diffSequence
 
 eulerBackTracking ::
      DeBruijnGraph -> Edge -> [Edge] -> [DNASequence] -> [DNASequence]
@@ -103,10 +135,17 @@ eulerBackTracking deBruijnGraph current visited@(newCurrent:xs) path
     successor = head successors
     newPath = numberToSequence (p deBruijnGraph) current : path
 
-eulerPath :: DeBruijnGraph -> Edge -> [Edge] -> [DNASequence] -> [DNASequence]
-eulerPath deBruijnGraph current visited path
-  | null successors = eulerBackTracking newDeBruijnGraph (-1) newVisited path
-  | otherwise = eulerPath newDeBruijnGraph newCurrent newVisited path
+-- |
+eulerPath
+  :: DeBruijnGraph    -- ^
+  -> Edge             -- ^
+  -> [Edge]
+  -> [DNASequence]
+  -> [DNASequence]  -- TODO: change to Maybe [DNASequence]
+eulerPath deBruijnGraph current visited path =
+  case successors of
+    (newCurrent:_) -> eulerPath newDeBruijnGraph newCurrent newVisited path
+    _              -> eulerBackTracking newDeBruijnGraph (-1) newVisited path
   where
     successors =
       (successorEdges (bitArr newDeBruijnGraph) .
@@ -114,9 +153,7 @@ eulerPath deBruijnGraph current visited path
         current
     newDeBruijnGraph =
       deBruijnGraph /// numberToSequence (p deBruijnGraph) current
-    successor = head successors
     newVisited = current : visited
-    newCurrent = successor
 
 selectStartNode :: [(Node, (Int, Int))] -> Node
 selectStartNode l = startNode
